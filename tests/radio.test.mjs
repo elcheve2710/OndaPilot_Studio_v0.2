@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activeBlock, blockDuration, conflicts, dayIndex, playOrder, seedData, shuffled, upcomingBlocks, weeklyCoverage } from "../lib/radio.ts";
+import { activeBlock, blockDuration, conflicts, dayIndex, playOrder, seedData, shuffled, upcomingBlocks, weeklyCoverage } from "../domain/radio.ts";
 
 const make = (day, start, end) => ({ id: `${day}-${start}-${end}`, title: "Prueba", day, start, end, playlistId: "p1" });
 

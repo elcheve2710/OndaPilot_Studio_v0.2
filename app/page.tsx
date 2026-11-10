@@ -2,7 +2,9 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, AlertCircle, ArrowDown, ArrowRight, ArrowUp, AudioLines, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, FileAudio, Headphones, LayoutDashboard, ListMusic, Megaphone, Menu, MoreHorizontal, Music2, Pause, Play, Plus, Radio, Search, Shuffle, Trash2, Upload, WandSparkles, Waves, X } from "lucide-react";
-import { activeBlock, blockDuration, COLORS, conflicts, dayIndex, exportJson, fmtSeconds, formatTime, id, loadAudio, minutes, RadioBlock, RadioData, saveAudio, seedData, Track, upcomingBlocks, WEEK_DAYS, weeklyCoverage } from "@/lib/radio";
+import { activeBlock, blockDuration, COLORS, conflicts, dayIndex, fmtSeconds, formatTime, id, minutes, RadioBlock, RadioData, seedData, Track, upcomingBlocks, WEEK_DAYS, weeklyCoverage } from "@/domain/radio";
+import { parseRadioData } from "@/domain/schemas";
+import { exportJson, loadAudio, saveAudio } from "@/infrastructure/browser/local-media";
 import { Metric, PageTitle, SearchBox, EmptyState, WeekTimeline, BlockModal, PlaylistModal, PlaylistEditor, CampaignModal, SettingsModal } from "./radio-components";
 import { PlayerPanel } from "./player-panel";
 
@@ -169,8 +171,8 @@ export default function Home() {
   async function importJson(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; if (!file) return;
     try {
-      const parsed = JSON.parse(await file.text()); const incoming = parsed.data as RadioData;
-      if (!incoming || !Array.isArray(incoming.tracks) || !Array.isArray(incoming.playlists) || !Array.isArray(incoming.blocks) || !Array.isArray(incoming.campaigns) || typeof incoming.station !== "string") throw new Error("Invalid format");
+      const incoming = parseRadioData(JSON.parse(await file.text())?.data);
+      if (!incoming) throw new Error("Invalid format");
       if (window.confirm("¿Reemplazar tu programación actual con este archivo?")) { setData(incoming); setNotice("Programación importada. Los audios deben existir en este navegador."); }
     } catch { setNotice("No fue posible leer este archivo de programación JSON."); }
     event.target.value = "";

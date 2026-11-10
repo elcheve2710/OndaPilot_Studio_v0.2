@@ -57,18 +57,32 @@ Para llegar a un servicio real, habrá que incorporar:
 Requiere Node.js moderno. En el checkout:
 
 ```bash
-npm install
+pnpm install
+npm run db:migrate:local   # crea las tablas en la D1 local (una vez, o tras una migración nueva)
 npm run dev
 ```
 
-El starter de Sites usa Vinext, React y TypeScript. Las reglas de programación están en `lib/radio.ts`, los componentes y formularios en `app/radio-components.tsx`, la aplicación en `app/page.tsx` y los estilos en `app/globals.css`.
+Stack: Vinext (Next.js sobre Vite), React y TypeScript, ejecutado como Cloudflare Worker.
 
-Las rutas `/api/radio`, `/api/audio` y `/api/azuracast` implementan persistencia, archivos y monitor de estación. En despliegue, las vinculaciones `DB` (D1) y `BUCKET` (R2) se declaran en `.openai/hosting.json` y se provisionan junto con el Site. La migración de esquema está en `drizzle/`.
+### Estructura
 
-Verificación de tipos:
+El código está organizado en capas para que la app pueda pasar de Cloudflare a un servidor propio sin reescribir la lógica:
+
+| Carpeta | Contenido |
+|---|---|
+| `domain/` | Reglas puras, sin React ni red: programación (`radio.ts`), cabina como máquina de estados (`player.ts`) y esquemas de validación zod (`schemas.ts`). |
+| `application/` | Puertos (interfaces que la app necesita: repositorio, almacenamiento de audio, auth, motor de emisión) y utilidades HTTP puras. |
+| `infrastructure/` | Adaptadores concretos: D1 y R2 (`cloudflare/`), autenticación, AzuraCast y almacenamiento del navegador. |
+| `server/` | `container.ts` elige los adaptadores; es el único lugar que cambia al migrar de hosting. |
+| `app/` | Interfaz y rutas `/api/radio`, `/api/audio`, `/api/azuracast`, que solo autentican, validan y llaman a los puertos. |
+
+Las vinculaciones `DB` (D1) y `BUCKET` (R2) se toman de `.openai/hosting.json` si existe (no está en el repo); si no, se usan esos nombres por defecto. Las migraciones de esquema están en `drizzle/`.
+
+### Verificación
 
 ```bash
-npx tsc --noEmit
+npm test          # dominio, cabina, validación y rangos HTTP
+npx tsc --noEmit  # tipos
 ```
 
 ## Próximo hito

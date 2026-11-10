@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Activity, AlertCircle, ArrowDown, ArrowRight, ArrowUp, AudioLines, Check, ChevronLeft, ChevronRight, Clock3, Download, ListMusic, Plus, Radio, Search, Shuffle, Trash2, Upload, X } from "lucide-react";
-import { blockDuration, COLORS, conflicts, fmtSeconds, id, minutes, RadioBlock, RadioData, Track, WEEK_DAYS } from "@/lib/radio";
+import { blockDuration, COLORS, conflicts, fmtSeconds, id, minutes, RadioBlock, RadioData, Track, WEEK_DAYS } from "@/domain/radio";
 
 export function Metric({ icon: Icon, tone, label, value, detail }: { icon: typeof Radio; tone: string; label: string; value: string; detail: string }) {
   return <div className="metric-card"><div className={`metric-icon ${tone}`}><Icon size={22}/></div><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-detail">{detail}</div></div>;

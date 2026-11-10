@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activeBlock, blockDuration, conflicts, dayIndex, seedData, upcomingBlocks, weeklyCoverage } from "../lib/radio.ts";
+import { activeBlock, blockDuration, conflicts, dayIndex, playOrder, seedData, shuffled, upcomingBlocks, weeklyCoverage } from "../lib/radio.ts";
 
 const make = (day, start, end) => ({ id: `${day}-${start}-${end}`, title: "Prueba", day, start, end, playlistId: "p1" });
 
@@ -33,6 +33,21 @@ test("las horas de programación respetan America/Bogota", () => {
   assert.equal(activeBlock(seedData, saturdayMorning)?.title, "Fin de semana musical");
   const sundayAtDawn = new Date("2026-11-08T12:00:00.000Z");
   assert.equal(activeBlock(seedData, sundayAtDawn), undefined);
+});
+
+test("el modo aleatorio conserva todas las pistas sin repetir", () => {
+  const ids = ["a", "b", "c", "d", "e"];
+  for (let run = 0; run < 50; run++) assert.deepEqual([...shuffled(ids)].sort(), ids);
+  assert.deepEqual(playOrder(ids, false, "e"), ids);
+});
+
+test("una nueva vuelta aleatoria no repite la última canción", () => {
+  const ids = ["a", "b", "c"];
+  const alwaysLast = () => 0.999;
+  assert.deepEqual(shuffled(ids, alwaysLast), ["a", "b", "c"]);
+  assert.equal(playOrder(ids, true, "a", alwaysLast)[0], "b");
+  for (let run = 0; run < 50; run++) assert.notEqual(playOrder(ids, true, "b")[0], "b");
+  assert.deepEqual(playOrder(["solo"], true, "solo"), ["solo"]);
 });
 
 test("orden de próximos bloques", () => {

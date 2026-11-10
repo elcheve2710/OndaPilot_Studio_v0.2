@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, AudioLines, Check, Clock3, Headphones, ListMusic, Megaphone, Pause, Play, Radio, SkipForward, Volume2, Waves } from "lucide-react";
-import { activeBlock, dayIndex, fmtSeconds, loadAudio, RadioData, Track } from "@/lib/radio";
+import { AlertCircle, AudioLines, Check, Clock3, Headphones, ListMusic, Megaphone, Pause, Play, Radio, SkipBack, SkipForward, Volume2, Waves } from "lucide-react";
+import { activeBlock, dayIndex, fmtSeconds, loadAudio, playOrder, RadioData, Track } from "@/lib/radio";
 
 type AzuraState = { configured: boolean; connected: boolean; isOnline?: boolean; stationName?: string; song?: string | null; artist?: string | null; listeners?: number | null; streamUrl?: string | null; error?: string };
 
@@ -20,6 +20,7 @@ export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLi
   const [playbackNonce, setPlaybackNonce] = useState(0);
   const [overrideId, setOverrideId] = useState<string | null>(null);
   const [pendingAds, setPendingAds] = useState<string[]>([]);
+  const [pendingPlaylistId, setPendingPlaylistId] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [source, setSource] = useState<string | null>(null);
@@ -36,26 +37,27 @@ export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLi
   const current = data.tracks.find((t) => t.id === currentId);
   const next = data.tracks.find((t) => t.id === sequence[(cursor + 1) % (sequence.length || 1)]);
   const availableAds = data.campaigns.map((campaign) => ({ campaign, track: data.tracks.find((t) => t.id === campaign.trackId) })).filter((x) => x.campaign.enabled && playable(x.track));
+  const pendingPlaylist = data.playlists.find((p) => p.id === pendingPlaylistId);
+  const upNext = pendingAds.length ? `Cuña · ${data.tracks.find((t) => t.id === pendingAds[0])?.title}`
+    : pendingPlaylist ? `Cambio de franja · ${pendingPlaylist.name}`
+    : cursor + 1 >= sequence.length && selectedPlaylist?.shuffle ? "Nueva vuelta aleatoria de la playlist"
+    : next?.title;
 
+  // While playing, a schedule change waits for the current song to end, like ad spots do.
   useEffect(() => {
     if (!followSchedule) return;
     const update = () => {
       const active = activeBlock(data, new Date());
       const fallback = data.playlists.find((p) => p.name.toLowerCase().includes("rotación")) || data.playlists[0];
       const nextId = active?.playlistId || fallback?.id;
-      if (!nextId || nextId === playlistId) return;
-      setPlaylistId(nextId);
-      if (started) {
-        const playlist = data.playlists.find((p) => p.id === nextId);
-        const ids = (playlist?.trackIds || []).filter((trackId) => playable(data.tracks.find((t) => t.id === trackId)));
-        if (ids.length) { setSequence(playlist?.shuffle ? [...ids].sort(() => Math.random() - .5) : ids); setCursor(0); setOverrideId(null); setPlaybackNonce((n) => n + 1); }
-        else setError("La franja automática no tiene audios cargados. Agrega canciones a su playlist.");
-      }
+      if (!nextId || nextId === (pendingPlaylistId || playlistId)) return;
+      if (started) setPendingPlaylistId(nextId === playlistId ? null : nextId);
+      else setPlaylistId(nextId);
     };
     update();
     const timer = window.setInterval(update, 15000);
     return () => window.clearInterval(timer);
-  }, [followSchedule, playlistId, started, data]);
+  }, [followSchedule, playlistId, pendingPlaylistId, started, data]);
 
   useEffect(() => {
     let canceled = false;
@@ -97,22 +99,46 @@ export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLi
     return () => window.clearInterval(timer);
   }, [autoAds, started, availableAds.map((x) => x.campaign.id + x.campaign.minuteSlots.join(",")).join("|")]);
 
+  function playableIds(id: string) {
+    const playlist = data.playlists.find((p) => p.id === id);
+    return (playlist?.trackIds || []).filter((trackId) => playable(data.tracks.find((t) => t.id === trackId)));
+  }
   function begin() {
     const ids = selection.map((track) => track.id);
     if (!ids.length) { setError("Necesitas agregar archivos de audio reales a la playlist seleccionada."); return; }
-    setSequence(selectedPlaylist?.shuffle ? [...ids].sort(() => Math.random() - .5) : ids);
-    setCursor(0); setPlaybackNonce((n) => n + 1); setOverrideId(null); setPendingAds([]); setStarted(true); setPaused(false); setError("");
+    setSequence(playOrder(ids, Boolean(selectedPlaylist?.shuffle)));
+    setCursor(0); setPlaybackNonce((n) => n + 1); setOverrideId(null); setPendingAds([]); setPendingPlaylistId(null); setStarted(true); setPaused(false); setError("");
   }
   function advance() {
     setPaused(false);
     setPlaybackNonce((n) => n + 1);
-    if (overrideId) {
-      if (pendingAds.length) { setOverrideId(pendingAds[0]); setPendingAds((old) => old.slice(1)); }
-      else { setOverrideId(null); if (sequence.length) setCursor((index) => (index + 1) % sequence.length); }
+    if (pendingAds.length) { setOverrideId(pendingAds[0]); setPendingAds((old) => old.slice(1)); return; }
+    setOverrideId(null);
+    const lastId = sequence[cursor];
+    if (pendingPlaylistId) {
+      const ids = playableIds(pendingPlaylistId);
+      const playlist = data.playlists.find((p) => p.id === pendingPlaylistId);
+      setPlaylistId(pendingPlaylistId);
+      setPendingPlaylistId(null);
+      if (ids.length) { setSequence(playOrder(ids, Boolean(playlist?.shuffle), lastId)); setCursor(0); return; }
+      setError("La franja automática no tiene audios cargados. Agrega canciones a su playlist.");
+    }
+    if (!sequence.length) return;
+    if (cursor + 1 < sequence.length) { setCursor(cursor + 1); return; }
+    // A new lap picks up tracks added to the playlist while it was playing.
+    const ids = selection.length ? selection.map((track) => track.id) : sequence;
+    setSequence(playOrder(ids, Boolean(selectedPlaylist?.shuffle), lastId));
+    setCursor(0);
+  }
+  function back() {
+    const element = audio.current;
+    if (overrideId || cursor === 0 || (element && element.currentTime > 3)) {
+      if (element) { element.currentTime = 0; void element.play().catch(() => setError("Pulsa reproducir para permitir audio en este navegador.")); }
       return;
     }
-    if (pendingAds.length) { setOverrideId(pendingAds[0]); setPendingAds((old) => old.slice(1)); return; }
-    if (sequence.length) setCursor((index) => (index + 1) % sequence.length);
+    setPaused(false);
+    setPlaybackNonce((n) => n + 1);
+    setCursor(cursor - 1);
   }
   function togglePause() {
     if (!audio.current) return;
@@ -131,15 +157,16 @@ export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLi
         <span className={`player-current-tag ${isSpot ? "player-ad-tag" : ""}`}>{isSpot ? "CUÑA PUBLICITARIA" : started ? "REPRODUCCIÓN EN CABINA" : "LISTO PARA REPRODUCIR"}</span>
         <h3>{current?.title || "Selecciona tu playlist"}</h3>
         <p>{current?.artist || "Presiona iniciar para cargar la cola musical"}</p>
-        <div className="player-controls"><button className="player-control-secondary" disabled={!started} onClick={advance} aria-label="Saltar al siguiente"><SkipForward size={22}/></button><button className="player-control-main" aria-label={started && !paused ? "Pausar reproducción" : "Iniciar o reanudar reproducción"} onClick={started ? togglePause : begin}>{started && !paused ? <Pause size={26} fill="currentColor"/> : <Play size={26} fill="currentColor"/>}</button><button className="player-control-secondary" disabled={!started} onClick={advance} aria-label="Siguiente canción"><SkipForward size={22}/></button></div>
+        <div className="player-controls"><button className="player-control-secondary" disabled={!started} onClick={back} aria-label="Reiniciar o volver a la canción anterior"><SkipBack size={22}/></button><button className="player-control-main" aria-label={started && !paused ? "Pausar reproducción" : "Iniciar o reanudar reproducción"} onClick={started ? togglePause : begin}>{started && !paused ? <Pause size={26} fill="currentColor"/> : <Play size={26} fill="currentColor"/>}</button><button className="player-control-secondary" disabled={!started} onClick={advance} aria-label="Siguiente canción"><SkipForward size={22}/></button></div>
         {source && <audio ref={audio} key={`${source}-${playbackNonce}`} src={source} autoPlay onCanPlay={() => { void audio.current?.play().catch(() => setError("El navegador bloqueó el inicio automático. Pulsa reproducir.")); }} onEnded={advance} onPlay={() => setPaused(false)} onPause={() => setPaused(true)} onError={() => setError("No fue posible reproducir este formato o archivo.")} controls className="player-native-audio" />}
+        {started && upNext && <div className="player-up-next"><Clock3 size={13}/><span>A continuación: <b>{upNext}</b></span></div>}
         {error && <div className="player-error"><AlertCircle size={16}/>{error}</div>}
         <div className="player-source-info"><Volume2 size={16}/><span>Salida de audio: este dispositivo</span><span className="player-tiny-dot"/> <span>Sin transmisión pública</span></div>
       </div>
       <div className="playback-note"><AlertCircle size={17}/><span>Esta cabina sí reproduce audio, pero <b>no es un servidor 24/7</b>. Si cierras la pestaña, se detiene. Para oyentes externos necesitaremos conectar AzuraCast.</span></div>
     </section>
     <aside className="player-side">
-      <section className="panel player-queue-panel"><div className="section-kicker">COLA MUSICAL</div><h2>¿Qué sonará?</h2><label className="player-select-label">Playlist<select value={playlistId} disabled={followSchedule} onChange={(e) => { setPlaylistId(e.target.value); setStarted(false); setSource(null); }}>{data.playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}</select></label><label className="player-check"><input type="checkbox" checked={followSchedule} onChange={(e) => setFollowSchedule(e.target.checked)} /> Seguir automáticamente la parrilla semanal</label><p className="player-small-text">Al cambiar de franja se carga su playlist. En horarios libres se usa la rotación de respaldo.</p><div className="player-queue-list">{selection.length ? selection.map((track, i) => <div key={track.id} className={`player-queue-item ${track.id === current?.id && !isSpot ? "playing" : ""}`}><span className="player-queue-number">{String(i+1).padStart(2,"0")}</span><div><b>{track.title}</b><small>{track.artist}</small></div><span>{fmtSeconds(track.duration)}</span></div>) : <div className="player-queue-empty"><Headphones size={22}/><b>No hay audios reproducibles</b><span>Agrega archivos propios y asígnalos a esta playlist.</span><button onClick={onViewLibrary}>Ir a la biblioteca</button></div>}</div><div className="player-queue-footer"><ListMusic size={15}/>{selection.length} archivos listos para sonar</div></section>
+      <section className="panel player-queue-panel"><div className="section-kicker">COLA MUSICAL</div><h2>¿Qué sonará?</h2><label className="player-select-label">Playlist<select value={playlistId} disabled={followSchedule} onChange={(e) => { setPlaylistId(e.target.value); setPendingPlaylistId(null); setStarted(false); setSource(null); }}>{data.playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}</select></label><label className="player-check"><input type="checkbox" checked={followSchedule} onChange={(e) => { setFollowSchedule(e.target.checked); if (!e.target.checked) setPendingPlaylistId(null); }} /> Seguir automáticamente la parrilla semanal</label><p className="player-small-text">Al cambiar de franja se carga su playlist cuando termina la canción en curso. En horarios libres se usa la rotación de respaldo.</p>{pendingPlaylist && <div className="pending-ads">Cambiará a «{pendingPlaylist.name}» al terminar la canción</div>}<div className="player-queue-list">{selection.length ? selection.map((track, i) => <div key={track.id} className={`player-queue-item ${track.id === current?.id && !isSpot ? "playing" : ""}`}><span className="player-queue-number">{String(i+1).padStart(2,"0")}</span><div><b>{track.title}</b><small>{track.artist}</small></div><span>{fmtSeconds(track.duration)}</span></div>) : <div className="player-queue-empty"><Headphones size={22}/><b>No hay audios reproducibles</b><span>Agrega archivos propios y asígnalos a esta playlist.</span><button onClick={onViewLibrary}>Ir a la biblioteca</button></div>}</div><div className="player-queue-footer"><ListMusic size={15}/>{selection.length} archivos listos para sonar</div></section>
       <section className="panel player-ads-panel"><div className="section-kicker">PAUTAS</div><h2>Cuñas en reproducción</h2><label className="player-check"><input type="checkbox" checked={autoAds} onChange={(e) => setAutoAds(e.target.checked)} /> Poner cuñas en cola al minuto programado</label><p className="player-small-text">Las cuñas empiezan cuando termina la canción en curso. No se interrumpe el audio a mitad de canción.</p>{availableAds.length ? availableAds.map(({campaign,track}) => <button className="player-spot" key={campaign.id} onClick={() => { setPendingAds((old) => [...old,track!.id]); }} disabled={!started}><Megaphone size={17}/><span><b>{campaign.title}</b><small>Agregar siguiente · {track!.duration} s</small></span><Check size={15}/></button>) : <div className="player-small-text">Importa cuñas y activa una campaña para verlas aquí.</div>}{pendingAds.length>0&&<div className="pending-ads">{pendingAds.length} cuña(s) pendiente(s)</div>}</section>
       <section className="panel player-azura-panel"><div className="section-kicker">SERVIDOR DE EMISIÓN</div><div className="azura-header"><Radio size={20}/><h2>AzuraCast</h2><span className={azura?.connected ? "azura-online" : "azura-offline"}>{azura?.connected ? "CONECTADO" : "PENDIENTE"}</span></div>{azura?.connected ? <div className="azura-live"><b>{azura.stationName}</b><span>{azura.isOnline ? "Transmitiendo" : "Estación fuera del aire"}</span><p>{azura.artist} — {azura.song}</p>{typeof azura.listeners === "number" && <small>{azura.listeners} oyentes conectados</small>}{azura.streamUrl && <audio controls src={azura.streamUrl} className="azura-player"/>}</div> : <p className="player-small-text">Configura la URL y el ID de tu emisora como variables seguras del servidor. Aquí aparecerán la canción actual y el enlace de emisión.</p>}</section>
     </aside>

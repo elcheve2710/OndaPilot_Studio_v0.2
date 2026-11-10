@@ -112,6 +112,23 @@ function colombiaTime(date: Date) {
   return hour * 60 + minute;
 }
 
+export function shuffled<T>(items: T[], random = Math.random) {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// Play order for one lap of a playlist; a reshuffled lap never opens with the track that just ended.
+export function playOrder(ids: string[], shuffle: boolean, lastId?: string, random = Math.random) {
+  if (!shuffle) return [...ids];
+  const order = shuffled(ids, random);
+  if (order.length > 1 && order[0] === lastId) [order[0], order[1]] = [order[1], order[0]];
+  return order;
+}
+
 export function blockDuration(block: RadioBlock) {
   const delta = minutes(block.end) - minutes(block.start);
   return delta > 0 ? delta : delta + 1440;

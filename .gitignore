@@ -85,3 +85,6 @@ Desktop.ini
 
 # Local hosting config
 /.openai/
+
+# Internal notes
+/docs/

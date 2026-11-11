@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activeBlock, blockDuration, conflicts, dayIndex, playOrder, seedData, shuffled, upcomingBlocks, weeklyCoverage } from "../domain/radio.ts";
+import { activeBlock, blockDuration, conflicts, dayIndex, fallbackPlaylist, playOrder, removePlaylist, removeTrack, scheduledPlaylistId, seedData, shuffled, upcomingBlocks, weeklyCoverage } from "../domain/radio.ts";
 
 const make = (day, start, end) => ({ id: `${day}-${start}-${end}`, title: "Prueba", day, start, end, playlistId: "p1" });
 
@@ -55,4 +55,37 @@ test("orden de próximos bloques", () => {
   const next = upcomingBlocks(seedData, saturdayMorning, 2);
   assert.equal(next[0]?.title, "Especial tropical");
   assert.equal(next[1]?.title, "Fin de semana musical");
+});
+
+test("la playlist de respaldo es la configurada aunque cambie de nombre", () => {
+  const data = { ...seedData, playlists: seedData.playlists.map((p) => p.id === "p4" ? { ...p, name: "Madrugada" } : p) };
+  assert.equal(fallbackPlaylist(data).id, "p4");
+  assert.equal(fallbackPlaylist({ ...data, fallbackPlaylistId: "p2" }).id, "p2");
+});
+
+test("sin respaldo configurado se usa la rotación y luego la primera playlist", () => {
+  assert.equal(fallbackPlaylist({ ...seedData, fallbackPlaylistId: undefined }).id, "p4");
+  assert.equal(fallbackPlaylist({ ...seedData, fallbackPlaylistId: "borrada", playlists: seedData.playlists.slice(0, 2) }).id, "p1");
+});
+
+test("fuera de franja suena el respaldo y dentro la playlist del bloque", () => {
+  assert.equal(scheduledPlaylistId(seedData, new Date("2026-05-18T13:00:00Z")), "p1"); // lunes 08:00 Bogotá
+  assert.equal(scheduledPlaylistId(seedData, new Date("2026-05-18T16:00:00Z")), "p4"); // lunes 11:00, hueco
+});
+
+test("eliminar la playlist de respaldo quita sus bloques y el respaldo", () => {
+  const after = removePlaylist(seedData, "p4");
+  assert.equal(after.fallbackPlaylistId, undefined);
+  assert.ok(after.playlists.every((p) => p.id !== "p4"));
+  const kept = removePlaylist(seedData, "p1");
+  assert.equal(kept.fallbackPlaylistId, "p4");
+  assert.ok(kept.blocks.every((b) => b.playlistId !== "p1"));
+});
+
+test("eliminar una pista la quita de playlists y borra campañas que la usaban", () => {
+  const after = removeTrack(seedData, "ad1");
+  assert.ok(after.campaigns.every((c) => c.trackId !== "ad1"));
+  const music = removeTrack(seedData, "t1");
+  assert.ok(music.playlists.every((p) => !p.trackIds.includes("t1")));
+  assert.equal(music.tracks.length, seedData.tracks.length - 1);
 });

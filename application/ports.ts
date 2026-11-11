@@ -9,10 +9,16 @@ export interface AuthProvider {
   currentUser(): Promise<CurrentUser | null>;
 }
 
+export type StoredStation = { data: RadioData; updatedAt: string };
+export type SaveResult = { ok: true; updatedAt: string } | { ok: false; current: StoredStation | null };
+
 export interface StationRepository {
-  load(userId: string): Promise<{ data: RadioData; updatedAt: string } | null>;
-  /** Returns the stored updatedAt timestamp. */
-  save(userId: string, data: RadioData): Promise<string>;
+  load(userId: string): Promise<StoredStation | null>;
+  /**
+   * Optimistic concurrency: `expected` is the updatedAt the client last saw (null = must not exist yet,
+   * undefined = unconditional). On mismatch nothing is written and the current state is returned.
+   */
+  save(userId: string, data: RadioData, expected?: string | null): Promise<SaveResult>;
 }
 
 export type MediaInfo = { size: number; contentType: string };

@@ -1,0 +1,17 @@
+"use client";
+
+import { Activity, CalendarDays, ChevronLeft, ChevronRight, Clock3, ListMusic, Plus, Trash2 } from "lucide-react";
+import { blockDuration, COLORS, formatTime, minutes, RadioData, WEEK_DAYS, weeklyCoverage } from "@/domain/radio";
+import type { StationChange } from "@/features/station/use-station";
+import { EmptyState, PageTitle, WeekTimeline } from "@/features/shared/ui";
+
+export function ScheduleView({ data, change, today, day, onDay, onCreateBlock }: { data: RadioData; change: StationChange; today: number; day: number; onDay: (day: number) => void; onCreateBlock: () => void }) {
+  const coverage = weeklyCoverage(data);
+  const dayBlocks = data.blocks.filter((b) => b.day === day).sort((a, b) => minutes(a.start) - minutes(b.start));
+  return <>
+    <PageTitle eyebrow="PLANIFICACIÓN" title="Parrilla semanal" description="Diseña los bloques, controla horarios y evita cruces en la programación." action={<button className="button-primary" onClick={onCreateBlock}><Plus size={17}/> Nuevo bloque</button>} />
+    <div className="schedule-stat-row"><span className="stat-chip"><CalendarDays size={16}/><b>{data.blocks.length}</b> bloques</span><span className="stat-chip"><Activity size={16}/><b>{coverage}%</b> cobertura</span><span className="stat-chip"><Clock3 size={16}/> Zona: <b>Colombia (UTC−5)</b></span></div>
+    <section className="panel full-schedule"><div className="panel-header"><div><span className="section-kicker">MAPA DE PROGRAMACIÓN</span><h2>Calendario visual</h2></div><span className="mini-tag">Semana recurrente</span></div><WeekTimeline blocks={data.blocks} playlists={data.playlists} today={today} selected={day} onDay={onDay}/></section>
+    <section className="panel day-detail"><div className="panel-header"><div><span className="section-kicker">DETALLE DEL DÍA</span><h2>{WEEK_DAYS[day]}</h2></div><div className="day-selector"><button aria-label="Día anterior" onClick={() => onDay((day+6)%7)}><ChevronLeft size={18}/></button><button aria-label="Día siguiente" onClick={() => onDay((day+1)%7)}><ChevronRight size={18}/></button></div></div><div className="day-pills">{WEEK_DAYS.map((name,i) => <button key={name} className={day===i?"selected":""} onClick={() => onDay(i)}>{name.slice(0,3)}</button>)}</div><div className="block-list">{dayBlocks.length ? dayBlocks.map((block) => { const playlist = data.playlists.find((p) => p.id === block.playlistId); return <div className="block-card" key={block.id}><span className="block-color" style={{background:playlist?.color || COLORS[0]}}/><div className="block-hour"><b>{formatTime(block.start)}</b><small>{formatTime(block.end)} · {(blockDuration(block)/60).toFixed(1)} h</small></div><div className="block-content"><b>{block.title}</b><small><ListMusic size={14}/>{playlist?.name || "Sin playlist"}{minutes(block.end)<=minutes(block.start) && <span className="overnight-tag">Cruza medianoche</span>}</small></div><button title="Eliminar bloque" aria-label="Eliminar bloque" className="icon-button danger-on-hover" onClick={() => change((old) => ({...old, blocks:old.blocks.filter((b) => b.id!==block.id)}), "Bloque eliminado")}><Trash2 size={17}/></button></div>; }) : <EmptyState title="No hay bloques este día" text="Añade una playlist a una franja horaria para empezar." />}</div><button className="add-inline" onClick={onCreateBlock}><Plus size={17}/> Añadir bloque al {WEEK_DAYS[day].toLowerCase()}</button></section>
+  </>;
+}

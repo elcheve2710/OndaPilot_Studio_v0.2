@@ -43,6 +43,8 @@ export type RadioData = {
   blocks: RadioBlock[];
   campaigns: Campaign[];
   station: string;
+  /** Playlist that plays when no block covers the current time. */
+  fallbackPlaylistId?: string;
 };
 
 export const WEEK_DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -51,6 +53,7 @@ export const id = () => (typeof crypto !== "undefined" && "randomUUID" in crypto
 
 export const seedData: RadioData = {
   station: "Mi emisora online",
+  fallbackPlaylistId: "p4",
   tracks: [
     { id: "t1", title: "Horizonte de verano", artist: "Audio de ejemplo", genre: "Pop latino", duration: 218, kind: "music" },
     { id: "t2", title: "Ritmo de la ciudad", artist: "Audio de ejemplo", genre: "Urbano", duration: 194, kind: "music" },
@@ -150,6 +153,37 @@ export function conflicts(block: RadioBlock, existing: RadioBlock[], ignoreId?: 
 export function activeBlock(data: RadioData, date: Date) {
   const time = dayIndex(date) * 1440 + colombiaTime(date);
   return data.blocks.find((block) => blockIntervals(block).some(([start, end]) => time >= start && time < end));
+}
+
+// Explicit setting first; older data without it falls back to the playlist named "rotación", then the first one.
+export function fallbackPlaylist(data: RadioData) {
+  return data.playlists.find((p) => p.id === data.fallbackPlaylistId)
+    || data.playlists.find((p) => p.name.toLowerCase().includes("rotación"))
+    || data.playlists[0];
+}
+
+export function scheduledPlaylistId(data: RadioData, date: Date) {
+  return activeBlock(data, date)?.playlistId || fallbackPlaylist(data)?.id;
+}
+
+// Removing a playlist also removes its blocks and clears it as fallback.
+export function removePlaylist(data: RadioData, playlistId: string): RadioData {
+  return {
+    ...data,
+    playlists: data.playlists.filter((p) => p.id !== playlistId),
+    blocks: data.blocks.filter((b) => b.playlistId !== playlistId),
+    fallbackPlaylistId: data.fallbackPlaylistId === playlistId ? undefined : data.fallbackPlaylistId,
+  };
+}
+
+// Removing a track also takes it out of every playlist and drops campaigns that used it as their spot.
+export function removeTrack(data: RadioData, trackId: string): RadioData {
+  return {
+    ...data,
+    tracks: data.tracks.filter((t) => t.id !== trackId),
+    playlists: data.playlists.map((p) => ({ ...p, trackIds: p.trackIds.filter((x) => x !== trackId) })),
+    campaigns: data.campaigns.filter((c) => c.trackId !== trackId),
+  };
 }
 
 export function upcomingBlocks(data: RadioData, from: Date, count = 5) {

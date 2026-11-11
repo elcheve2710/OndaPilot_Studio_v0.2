@@ -1,0 +1,12 @@
+"use client";
+
+import { useState } from "react";
+import { AlertCircle, Check, Clock3 } from "lucide-react";
+import { conflicts, id, RadioBlock, RadioData, WEEK_DAYS } from "@/domain/radio";
+import { ModalFrame } from "@/features/shared/ui";
+
+export function BlockModal({data,day,onClose,onSave}:{data:RadioData;day:number;onClose:()=>void;onSave:(block:RadioBlock)=>void}) {
+  const [title,setTitle]=useState(""); const [chosenDay,setChosenDay]=useState(day); const [start,setStart]=useState("10:00"); const [end,setEnd]=useState("12:00"); const [playlistId,setPlaylistId]=useState(data.playlists[0]?.id||""); const [error,setError]=useState("");
+  function submit(e:React.FormEvent){e.preventDefault();if(!title.trim()||!playlistId){setError("Completa el nombre y elige una playlist.");return;}if(start===end){setError("El inicio y el fin no pueden ser iguales.");return;}const block={id:id(),title:title.trim(),day:chosenDay,start,end,playlistId};const overlap=conflicts(block,data.blocks);if(overlap.length){setError(`El horario se cruza con «${overlap[0].title}». Ajusta la franja para continuar.`);return;}onSave(block);}
+  return <ModalFrame title="Programar un bloque" subtitle="Asigna una playlist a una franja semanal." onClose={onClose}><form onSubmit={submit} className="modal-form"><label>Nombre del programa<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ej. Especial de la tarde"/></label><div className="form-grid"><label>Día de la semana<select value={chosenDay} onChange={e=>setChosenDay(Number(e.target.value))}>{WEEK_DAYS.map((d,i)=><option key={d} value={i}>{d}</option>)}</select></label><label>Playlist<select required value={playlistId} onChange={e=>setPlaylistId(e.target.value)}>{data.playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div><div className="form-grid"><label>Hora de inicio<input type="time" required value={start} onChange={e=>setStart(e.target.value)}/></label><label>Hora de fin<input type="time" required value={end} onChange={e=>setEnd(e.target.value)}/></label></div><p className="form-hint"><Clock3 size={15}/> Puedes cruzar medianoche. Se comprueban solapes, incluido el paso de domingo a lunes.</p>{error&&<p className="form-error"><AlertCircle size={16}/>{error}</p>}<div className="modal-actions"><button type="button" className="button-secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button-primary"><Check size={17}/> Guardar bloque</button></div></form></ModalFrame>;
+}

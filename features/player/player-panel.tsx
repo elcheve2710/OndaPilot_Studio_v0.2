@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AlertCircle, AudioLines, Check, Clock3, Headphones, ListMusic, Megaphone, Pause, Play, Radio, SkipBack, SkipForward, Volume2 } from "lucide-react";
 import { currentTrackId, initialPlayer, Lineup, playerReducer, upNext } from "@/domain/player";
-import { activeBlock, fmtSeconds, RadioData, Track } from "@/domain/radio";
+import { fallbackPlaylist, fmtSeconds, RadioData, scheduledPlaylistId, Track } from "@/domain/radio";
 import { loadAudio } from "@/infrastructure/browser/local-media";
 
 type AzuraState = { configured: boolean; connected: boolean; isOnline?: boolean; stationName?: string; song?: string | null; artist?: string | null; listeners?: number | null; streamUrl?: string | null; error?: string };
@@ -16,7 +16,7 @@ function currentMinuteInColombia() {
 }
 
 export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLibrary: () => void }) {
-  const [state, dispatch] = useReducer(playerReducer, undefined, () => initialPlayer(activeBlock(data, new Date())?.playlistId || data.playlists[0]?.id || ""));
+  const [state, dispatch] = useReducer(playerReducer, undefined, () => initialPlayer(scheduledPlaylistId(data, new Date()) || ""));
   const [paused, setPaused] = useState(false);
   const [localSource, setLocalSource] = useState<{ key: string; url: string } | null>(null);
   const [autoAds, setAutoAds] = useState(false);
@@ -33,6 +33,7 @@ export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLi
   const isSpot = current?.kind === "ad";
   const availableAds = data.campaigns.map((campaign) => ({ campaign, track: trackById(campaign.trackId) })).filter((x) => x.campaign.enabled && playable(x.track));
   const pendingPlaylist = data.playlists.find((p) => p.id === state.pendingPlaylistId);
+  const fallback = fallbackPlaylist(data);
   const coming = upNext(state, lineup);
   const comingLabel = !coming ? null
     : coming.kind === "ad" ? `Cuña · ${trackById(coming.id)?.title}`
@@ -64,9 +65,7 @@ export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLi
   useEffect(() => {
     if (!followSchedule) return;
     const update = () => {
-      const active = activeBlock(data, new Date());
-      const fallback = data.playlists.find((p) => p.name.toLowerCase().includes("rotación")) || data.playlists[0];
-      const nextId = active?.playlistId || fallback?.id;
+      const nextId = scheduledPlaylistId(data, new Date());
       if (nextId) dispatch({ type: "SCHEDULE_CHANGED", playlistId: nextId });
     };
     update();
@@ -128,7 +127,7 @@ export function PlayerPanel({ data, onViewLibrary }: { data: RadioData; onViewLi
       <div className="playback-note"><AlertCircle size={17}/><span>Esta cabina sí reproduce audio, pero <b>no es un servidor 24/7</b>. Si cierras la pestaña, se detiene. Para oyentes externos necesitaremos conectar AzuraCast.</span></div>
     </section>
     <aside className="player-side">
-      <section className="panel player-queue-panel"><div className="section-kicker">COLA MUSICAL</div><h2>¿Qué sonará?</h2><label className="player-select-label">Playlist<select value={state.playlistId} disabled={followSchedule} onChange={(e) => { dispatch({ type: "SELECT_PLAYLIST", playlistId: e.target.value }); setPaused(false); }}>{data.playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}</select></label><label className="player-check"><input type="checkbox" checked={followSchedule} onChange={(e) => { setFollowSchedule(e.target.checked); if (!e.target.checked) dispatch({ type: "STOP_FOLLOWING_SCHEDULE" }); }} /> Seguir automáticamente la parrilla semanal</label><p className="player-small-text">Al cambiar de franja se carga su playlist cuando termina la canción en curso. En horarios libres se usa la rotación de respaldo.</p>{pendingPlaylist && <div className="pending-ads">Cambiará a «{pendingPlaylist.name}» al terminar la canción</div>}<div className="player-queue-list">{selection.length ? selection.map((track, i) => <div key={track.id} className={`player-queue-item ${track.id === current?.id && !isSpot ? "playing" : ""}`}><span className="player-queue-number">{String(i+1).padStart(2,"0")}</span><div><b>{track.title}</b><small>{track.artist}</small></div><span>{fmtSeconds(track.duration)}</span></div>) : <div className="player-queue-empty"><Headphones size={22}/><b>No hay audios reproducibles</b><span>Agrega archivos propios y asígnalos a esta playlist.</span><button onClick={onViewLibrary}>Ir a la biblioteca</button></div>}</div><div className="player-queue-footer"><ListMusic size={15}/>{selection.length} archivos listos para sonar</div></section>
+      <section className="panel player-queue-panel"><div className="section-kicker">COLA MUSICAL</div><h2>¿Qué sonará?</h2><label className="player-select-label">Playlist<select value={state.playlistId} disabled={followSchedule} onChange={(e) => { dispatch({ type: "SELECT_PLAYLIST", playlistId: e.target.value }); setPaused(false); }}>{data.playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}</select></label><label className="player-check"><input type="checkbox" checked={followSchedule} onChange={(e) => { setFollowSchedule(e.target.checked); if (!e.target.checked) dispatch({ type: "STOP_FOLLOWING_SCHEDULE" }); }} /> Seguir automáticamente la parrilla semanal</label><p className="player-small-text">Al cambiar de franja se carga su playlist cuando termina la canción en curso. En horarios libres suena la playlist de respaldo{fallback ? ` («${fallback.name}»)` : ""}.</p>{pendingPlaylist && <div className="pending-ads">Cambiará a «{pendingPlaylist.name}» al terminar la canción</div>}<div className="player-queue-list">{selection.length ? selection.map((track, i) => <div key={track.id} className={`player-queue-item ${track.id === current?.id && !isSpot ? "playing" : ""}`}><span className="player-queue-number">{String(i+1).padStart(2,"0")}</span><div><b>{track.title}</b><small>{track.artist}</small></div><span>{fmtSeconds(track.duration)}</span></div>) : <div className="player-queue-empty"><Headphones size={22}/><b>No hay audios reproducibles</b><span>Agrega archivos propios y asígnalos a esta playlist.</span><button onClick={onViewLibrary}>Ir a la biblioteca</button></div>}</div><div className="player-queue-footer"><ListMusic size={15}/>{selection.length} archivos listos para sonar</div></section>
       <section className="panel player-ads-panel"><div className="section-kicker">PAUTAS</div><h2>Cuñas en reproducción</h2><label className="player-check"><input type="checkbox" checked={autoAds} onChange={(e) => setAutoAds(e.target.checked)} /> Poner cuñas en cola al minuto programado</label><p className="player-small-text">Las cuñas empiezan cuando termina la canción en curso. No se interrumpe el audio a mitad de canción.</p>{availableAds.length ? availableAds.map(({campaign,track}) => <button className="player-spot" key={campaign.id} onClick={() => dispatch({ type: "QUEUE_ADS", ids: [track!.id] })} disabled={!started}><Megaphone size={17}/><span><b>{campaign.title}</b><small>Agregar siguiente · {track!.duration} s</small></span><Check size={15}/></button>) : <div className="player-small-text">Importa cuñas y activa una campaña para verlas aquí.</div>}{state.pendingAds.length>0&&<div className="pending-ads">{state.pendingAds.length} cuña(s) pendiente(s)</div>}</section>
       <section className="panel player-azura-panel"><div className="section-kicker">SERVIDOR DE EMISIÓN</div><div className="azura-header"><Radio size={20}/><h2>AzuraCast</h2><span className={azura?.connected ? "azura-online" : "azura-offline"}>{azura?.connected ? "CONECTADO" : "PENDIENTE"}</span></div>{azura?.connected ? <div className="azura-live"><b>{azura.stationName}</b><span>{azura.isOnline ? "Transmitiendo" : "Estación fuera del aire"}</span><p>{azura.artist} — {azura.song}</p>{typeof azura.listeners === "number" && <small>{azura.listeners} oyentes conectados</small>}{azura.streamUrl && <audio controls src={azura.streamUrl} className="azura-player"/>}</div> : <p className="player-small-text">Configura la URL y el ID de tu emisora como variables seguras del servidor. Aquí aparecerán la canción actual y el enlace de emisión.</p>}</section>
     </aside>

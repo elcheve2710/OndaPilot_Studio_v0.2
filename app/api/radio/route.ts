@@ -1,3 +1,4 @@
+import { expectedVersion } from "@/application/station-version";
 import { parseRadioData } from "@/domain/schemas";
 import { services } from "@/server/container";
 import { json } from "@/server/http";
@@ -32,7 +33,8 @@ export async function PUT(request: Request) {
   const data = parseRadioData(body);
   if (!data) return json({ error: "invalid_station_data" }, 400);
   try {
-    return json({ ok: true, updatedAt: await stations.save(user.userId, data) });
+    const result = await stations.save(user.userId, data, expectedVersion(request.headers));
+    return result.ok ? json(result) : json({ error: "version_conflict", current: result.current }, 409);
   } catch (error) {
     console.error("Could not save station state", error);
     return json({ error: "storage_unavailable" }, 503);

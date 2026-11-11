@@ -29,3 +29,12 @@ test("el esquema rechaza datos inválidos", () => {
   assert.equal(parseRadioData({ ...seedData, blocks: [{ id: "b", day: 0, start: "6:00", end: "07:00", playlistId: "p1" }] }), null);
   assert.equal(parseRadioData({ ...seedData, tracks: [{ id: "t", title: "x", duration: 1, kind: "jingle" }] }), null);
 });
+
+test("la precondición de versión se lee de If-Match / If-None-Match", async () => {
+  const { expectedVersion, nextVersion } = await import("../application/station-version.ts");
+  assert.equal(expectedVersion(new Headers({ "If-Match": "\"2026-11-10T10:00:00.000Z\"" })), "2026-11-10T10:00:00.000Z");
+  assert.equal(expectedVersion(new Headers({ "If-None-Match": "*" })), null);
+  assert.equal(expectedVersion(new Headers()), undefined);
+  const now = new Date("2026-11-10T10:00:00.000Z");
+  assert.notEqual(nextVersion(now.toISOString(), now), now.toISOString());
+});

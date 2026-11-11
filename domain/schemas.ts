@@ -7,6 +7,7 @@ const clock = z.string().regex(/^\d{2}:\d{2}$/);
 
 export const radioDataSchema = z.object({
   station: z.string().max(160),
+  fallbackPlaylistId: z.string().optional(),
   tracks: z.array(z.object({ id: z.string(), title: z.string(), duration: z.number(), kind: z.enum(["music", "ad"]) }).passthrough()).max(5000),
   playlists: z.array(z.object({ id: z.string(), name: z.string(), trackIds: z.array(z.string()) }).passthrough()).max(500),
   blocks: z.array(z.object({ id: z.string(), day: z.number().int().min(0).max(6), start: clock, end: clock }).passthrough()).max(3000),

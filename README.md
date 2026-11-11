@@ -10,7 +10,8 @@ Un estudio web para **una emisora online**. Proyecto propio de Juan Esteban Eche
 - Playlists editables, con orden manual, configuración aleatoria y eliminación de pistas.
 - Parrilla semanal con bloques recurrentes, visualización de días, franjas nocturnas y detección de solapes, incluidos los cruces de domingo a lunes.
 - Campañas publicitarias con minutos previstos por hora y cálculo de duración de las cuñas.
-- Cabina web de reproducción continua con playlist, salto de canciones, pausa, cambio automático de playlist conforme a la parrilla, rotación de respaldo y cuñas en cola (después de terminar la canción en curso).
+- Cabina web de reproducción continua con playlist, salto de canciones, pausa, cambio automático de playlist conforme a la parrilla, playlist de respaldo configurable para las horas sin bloque y cuñas en cola (después de terminar la canción en curso).
+- Guardado con control de versiones: si otra pestaña o persona guardó antes, la app avisa y deja elegir qué versión conservar en vez de sobrescribir.
 - API de archivos con carga y streaming autenticado, incluyendo solicitudes de rango para reproducción en HTMLAudioElement.
 - Monitor de AzuraCast de solo lectura, activable mediante configuración segura del servidor.
 - Dashboard con métricas, cobertura semanal, franja actual y siguientes bloques.
@@ -74,7 +75,8 @@ El código está organizado en capas para que la app pueda pasar de Cloudflare a
 | `application/` | Puertos (interfaces que la app necesita: repositorio, almacenamiento de audio, auth, motor de emisión) y utilidades HTTP puras. |
 | `infrastructure/` | Adaptadores concretos: D1 y R2 (`cloudflare/`), autenticación, AzuraCast y almacenamiento del navegador. |
 | `server/` | `container.ts` elige los adaptadores; es el único lugar que cambia al migrar de hosting. |
-| `app/` | Interfaz y rutas `/api/radio`, `/api/audio`, `/api/azuracast`, que solo autentican, validan y llaman a los puertos. |
+| `features/` | Interfaz por sección (resumen, parrilla, biblioteca, playlists, publicidad, cabina) y el hook `useStation()`, que carga, guarda y resuelve conflictos. |
+| `app/` | `page.tsx` (navegación y modales compartidos) y las rutas `/api/radio`, `/api/audio`, `/api/azuracast`, que solo autentican, validan y llaman a los puertos. |
 
 Las vinculaciones `DB` (D1) y `BUCKET` (R2) se toman de `.openai/hosting.json` si existe (no está en el repo); si no, se usan esos nombres por defecto. Las migraciones de esquema están en `drizzle/`.
 
